@@ -75,7 +75,9 @@ extern char ether_buffer[];
 extern ProgramData pd;
 
 #if defined(ESP8266)
-	SSD1306Display OpenSprinkler::lcd(0x3c, SDA, SCL);
+	// Display deactivated for SONOFF 4chProR3. 4,5, is used by relays.
+	SSD1306Display OpenSprinkler::lcd(0x3c, 255, 255);
+	//SSD1306Display OpenSprinkler::lcd(0x3c, SDA, SCL);
 	byte OpenSprinkler::state = OS_STATE_INITIAL;
 	byte OpenSprinkler::prev_station_bits[MAX_NUM_BOARDS];
 	IOEXP* OpenSprinkler::expanders[MAX_NUM_BOARDS/2];
@@ -1819,6 +1821,9 @@ void OpenSprinkler::switch_special_station(byte sid, byte value, uint16_t dur) {
 byte OpenSprinkler::set_station_bit(byte sid, byte value, uint16_t dur) {
 	byte *data = station_bits+(sid>>3);  // pointer to the station byte
 	byte mask = (byte)1<<(sid&0x07); // mask
+	
+	/*
+	// Not used for Sonoff 4chpror3
 	if (value) {
 		if((*data)&mask) return 0;  // if bit is already set, return no change
 		else {
@@ -1838,6 +1843,58 @@ byte OpenSprinkler::set_station_bit(byte sid, byte value, uint16_t dur) {
 			return 255;
 		}
 	}
+	*/
+	
+	// Changes for Sonoff 4chpror3
+	// Initialize IOs as output
+	pinModeExt(12, OUTPUT); // Relay 1
+	pinModeExt(5, OUTPUT);  // Relay 2
+	pinModeExt(4, OUTPUT);  // Relay 3
+	pinModeExt(15, OUTPUT); // Relay 4
+
+	if (value) {
+    if((*data)&mask) return 0;  // if bit is already set, return no change
+    else {
+      (*data) = (*data) | mask;
+      switch_special_station(sid, 1, dur); // handle special stations
+      switch (sid) {
+        case 0:
+          digitalWriteExt(12, HIGH);
+          break;
+        case 1:
+          digitalWriteExt(5, HIGH);
+          break;
+        case 2:
+          digitalWriteExt(4, HIGH);
+          break;
+        case 3:
+          digitalWriteExt(15, HIGH);
+          break;
+      }
+      return 1;
+    }
+  } else {
+    if(!((*data)&mask)) return 0; // if bit is already reset, return no change
+    else {
+      (*data) = (*data) & (~mask);
+      switch_special_station(sid, 0, dur); // handle special stations
+      switch (sid) {
+        case 0:
+          digitalWriteExt(12, LOW);
+          break;
+        case 1:
+          digitalWriteExt(5, LOW);
+          break;
+        case 2:
+          digitalWriteExt(4, LOW);
+          break;
+        case 3:
+          digitalWriteExt(15, LOW);
+          break;
+      }
+      return 255;
+    }
+  }
 	return 0;
 }
 
